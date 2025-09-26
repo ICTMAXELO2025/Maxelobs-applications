@@ -9,106 +9,90 @@ app = Flask(__name__)
 # ✅ Use environment variables for configuration
 app.secret_key = os.environ.get('SECRET_KEY', 'fallback-secret-key-for-development')
 
-# ✅ Fixed database configuration
+# ✅ Fixed database configuration for Render
 def get_database_url():
-    # Render provides DATABASE_URL environment variable
-    if os.environ.get('DATABASE_URL'):
-        return os.environ.get('DATABASE_URL')
+    # Render automatically provides DATABASE_URL environment variable
+    database_url = os.environ.get('DATABASE_URL')
+    
+    # If DATABASE_URL exists (on Render), use it directly
+    if database_url:
+        # Render's DATABASE_URL might be in postgres:// format, convert to postgresql://
+        if database_url.startswith('postgres://'):
+            database_url = database_url.replace('postgres://', 'postgresql://', 1)
+        return database_url
     else:
-        # Fallback for local development - simpler password
+        # Fallback for local development only
         return "postgresql://postgres:Maxelo%402023@localhost:5432/wil_database"
 
 def get_db_connection():
     """Get database connection for Render"""
     try:
         conn = psycopg2.connect(get_database_url())
-        print("✅ Database connection successful")
         return conn
     except Exception as e:
-        print(f"❌ Database connection error: {e}")
+        print(f"Database connection error: {e}")
         return None
-
-# ... rest of your code remains the same ...
 
 def init_database():
     """Initialize database tables"""
+    conn = get_db_connection()
+    if not conn:
+        print("Cannot initialize database - no connection")
+        return
+        
     try:
-        conn = get_db_connection()
-        if conn:
-            cur = conn.cursor()
-            
-            # Check if tables exist first
-            cur.execute('''
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'applications'
-                );
-            ''')
-            applications_table_exists = cur.fetchone()[0]
-            
-            if not applications_table_exists:
-                # Create applications table
-                cur.execute('''
-                    CREATE TABLE applications (
-                        id SERIAL PRIMARY KEY,
-                        full_name VARCHAR(100) NOT NULL,
-                        email VARCHAR(100) NOT NULL,
-                        phone VARCHAR(20) NOT NULL,
-                        institution VARCHAR(100) NOT NULL,
-                        course VARCHAR(100) NOT NULL,
-                        position VARCHAR(100) NOT NULL,
-                        application_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        status VARCHAR(20) DEFAULT 'Pending'
-                    )
-                ''')
-                print("✅ Applications table created")
-            
-            # Check if admin table exists
-            cur.execute('''
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'admin'
-                );
-            ''')
-            admin_table_exists = cur.fetchone()[0]
-            
-            if not admin_table_exists:
-                # Create admin table
-                cur.execute('''
-                    CREATE TABLE admin (
-                        id SERIAL PRIMARY KEY,
-                        email VARCHAR(100) UNIQUE NOT NULL,
-                        password VARCHAR(255) NOT NULL,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                ''')
-                print("✅ Admin table created")
-            
-            # Default admin credentials
-            DEFAULT_ADMIN_EMAIL = "admin@maxelo.co.za"
-            DEFAULT_ADMIN_PASSWORD = "Admin@maxelo2025!"
-            
-            # Check if admin exists, if not create default admin
-            cur.execute('SELECT * FROM admin WHERE email = %s', (DEFAULT_ADMIN_EMAIL,))
-            if not cur.fetchone():
-                hashed_password = generate_password_hash(DEFAULT_ADMIN_PASSWORD)
-                cur.execute(
-                    'INSERT INTO admin (email, password) VALUES (%s, %s)',
-                    (DEFAULT_ADMIN_EMAIL, hashed_password)
-                )
-                print("✅ Default admin created")
-            
-            conn.commit()
-            cur.close()
-            conn.close()
-            print("✅ Database initialized successfully")
-        else:
-            print("❌ Cannot initialize database - no connection")
-            
+        cur = conn.cursor()
+        
+        # Create applications table
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS applications (
+                id SERIAL PRIMARY KEY,
+                full_name VARCHAR(100) NOT NULL,
+                email VARCHAR(100) NOT NULL,
+                phone VARCHAR(20) NOT NULL,
+                institution VARCHAR(100) NOT NULL,
+                course VARCHAR(100) NOT NULL,
+                position VARCHAR(100) NOT NULL,
+                application_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                status VARCHAR(20) DEFAULT 'Pending'
+            )
+        ''')
+        
+        # Create admin table
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS admin (
+                id SERIAL PRIMARY KEY,
+                email VARCHAR(100) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Default admin credentials
+        DEFAULT_ADMIN_EMAIL = "admin@maxelo.co.za"
+        DEFAULT_ADMIN_PASSWORD = "Admin@maxelo2025!"
+        
+        # Check if admin exists, if not create default admin
+        cur.execute('SELECT * FROM admin WHERE email = %s', (DEFAULT_ADMIN_EMAIL,))
+        if not cur.fetchone():
+            hashed_password = generate_password_hash(DEFAULT_ADMIN_PASSWORD)
+            cur.execute(
+                'INSERT INTO admin (email, password) VALUES (%s, %s)',
+                (DEFAULT_ADMIN_EMAIL, hashed_password)
+            )
+            print("Default admin created")
+        
+        conn.commit()
+        print("Database initialized successfully")
+        
     except Exception as e:
-        print(f"❌ Database initialization error: {e}")
+        print(f"Database initialization error: {e}")
+        conn.rollback()
+    finally:
+        cur.close()
+        conn.close()
 
-# ✅ Test database connection route (temporary - for debugging)
+# ✅ Test database connection route
 @app.route('/test-db')
 def test_db():
     """Test database connection"""
@@ -126,7 +110,7 @@ def test_db():
     except Exception as e:
         return f"❌ Database error: {str(e)}"
 
-# ✅ Your application route (keep as is)
+# ✅ Application route
 @app.route('/application', methods=['GET', 'POST'])
 def application():
     if request.method == 'POST':
@@ -164,19 +148,19 @@ def application():
                 flash('Database connection error. Please try again.', 'error')
             
         except Exception as e:
-            print(f"❌ Application submission error: {e}")
+            print(f"Application submission error: {e}")
             flash('Error submitting application. Please try again.', 'error')
     
     return render_template('application.html')
 
-# ✅ Keep all your other routes exactly as they were...
+# ✅ Basic routes
 @app.route('/')
 def index():
     return render_template('index.html')
 
 @app.route('/apply')
 def apply():
-    return render_template('application.html')
+    return redirect(url_for('application'))
 
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
@@ -209,26 +193,43 @@ def admin_login():
                 flash('Database connection error', 'error')
                 
         except Exception as e:
-            print(f"❌ Admin login error: {e}")
+            print(f"Admin login error: {e}")
             flash('Login error. Please try again.', 'error')
     
     return render_template('admin_login.html')
 
-# ✅ Add your other admin routes here...
+@app.route('/admin/dashboard')
+def admin_dashboard():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    
+    try:
+        conn = get_db_connection()
+        if conn:
+            cur = conn.cursor()
+            cur.execute('SELECT * FROM applications ORDER BY application_date DESC')
+            applications = cur.fetchall()
+            cur.close()
+            conn.close()
+            return render_template('admin_dashboard.html', applications=applications)
+        else:
+            flash('Database connection error', 'error')
+            return render_template('admin_dashboard.html', applications=[])
+    except Exception as e:
+        print(f"Admin dashboard error: {e}")
+        flash('Error loading applications', 'error')
+        return render_template('admin_dashboard.html', applications=[])
+
+@app.route('/admin/logout')
+def admin_logout():
+    session.clear()
+    flash('You have been logged out successfully', 'success')
+    return redirect(url_for('admin_login'))
 
 if __name__ == '__main__':
     # Initialize database
-    print("🚀 Starting Maxelo Technologies WIL Application...")
+    print("Starting Maxelo Technologies WIL Application...")
     init_database()
-    
-    # Test database connection
-    print("🔍 Testing database connection...")
-    conn = get_db_connection()
-    if conn:
-        print("✅ Database connection test passed")
-        conn.close()
-    else:
-        print("❌ Database connection test failed")
     
     # Get port from environment variable (Render sets this)
     port = int(os.environ.get('PORT', 5000))
