@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maxelo Technologies - Work Integrated Learning</title>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --secondary: #3498db;
+            --accent: #e74c3c;
+            --light: #ecf0f1;
+            --dark: #2c3e50;
+            --success: #2ecc71;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .container {
+            width: 90%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background-color: var(--primary);
+            color: white;
+            padding: 1rem 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+        
+        .logo span {
+            color: var(--secondary);
+        }
+        
+        nav ul {
+            display: flex;
+            list-style: none;
+        }
+        
+        nav ul li {
+            margin-left: 20px;
+        }
+        
+        nav ul li a {
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        
+        nav ul li a.btn-admin {
+            background-color: var(--accent);
+        }
+        
+        nav ul li a.btn-apply {
+            background-color: var(--secondary);
+        }
+        
+        nav ul li a:hover {
+            opacity: 0.9;
+        }
+        
+        .hero {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 4rem 0;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .hero h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .hero p {
+            font-size: 1.2rem;
+            max-width: 800px;
+            margin: 0 auto 2rem;
+        }
+        
+        .btn {
+            display: inline-block;
+            background-color: var(--accent);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            text-decoration: none;
+            transition: background-color 0.3s;
+            margin: 5px;
+        }
+        
+        .btn:hover {
+            opacity: 0.9;
+        }
+        
+        .btn-secondary {
+            background-color: var(--secondary);
+        }
+        
+        section {
+            margin: 3rem 0;
+        }
+        
+        .section-title {
+            text-align: center;
+            margin-bottom: 2rem;
+            color: var(--primary);
+        }
+        
+        .company-details, .positions {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .positions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .position-card {
+            background-color: var(--light);
+            padding: 1.5rem;
+            border-radius: 8px;
+            border-left: 4px solid var(--secondary);
+        }
+        
+        .position-card h3 {
+            color: var(--primary);
+            margin-bottom: 10px;
+        }
+        
+        .cta-section {
+            text-align: center;
+            padding: 3rem 0;
+            background-color: var(--light);
+            border-radius: 8px;
+        }
+        
+        footer {
+            background-color: var(--dark);
+            color: white;
+            text-align: center;
+            padding: 2rem 0;
+            margin-top: 3rem;
+        }
+        
+        .message {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 1rem 0;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            nav ul {
+                margin-top: 1rem;
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+            
+            nav ul li {
+                margin: 5px 10px;
+            }
+            
+            .hero h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container header-content">
+            <div class="logo">Maxelo <span>Business Solutions</span></div>
+            <nav>
+                <ul>
+                    <li><a href="#about">About</a></li>
+                    <li><a href="#positions">Positions</a></li>
+                    <li><a href="{{ url_for('admin_login') }}" target="_blank" class="btn-admin">Admin</a></li>
+                    
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="container">
+                {% for category, message in messages %}
+                    <div class="message {{ category }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+
+
+    <section id="about">
+            <h2 class="section-title">About Maxelo Business Solutions</h2>
+            <div class="company-details">
+                <p>Maxelo Business Solutions is a leading provider of comprehensive business 
+services, dedicated to helping companies across various industries achieve their 
+full potential. Estimated with the mission to support businesses in navigating 
+the complexities of the modern marketplace, we combine deep industry 
+knowledge with a client-focused approach to deliver tailored solutions that 
+drive success.  </p></div>
+        </section>
+
+
+    <section class="hero">
+        <div class="container">
+            <h1>2025 Work-Integrated Learning Internships Are Now Open</h1>
+            <p>Gain real-world experience and jumpstart your career with our industry-leading internship program. Apply today to join our team of innovators.</p>
+            <p><strong>Closing Date:</strong> 20 June 2025</p>
+            
+            
+        </div>
+    </section>
+
+    <div class="container">
+        
+
+        <section id="positions">
+            <h2 class="section-title">Available Positions</h2>
+            <div class="positions-grid">
+               
+                <div class="position-card">
+                    <h3>UX/UI Design Intern</h3>
+                    <p>Collaborate with our design team to create intuitive user experiences. Work on wireframing, prototyping, and user testing for various digital products.</p>
+                    <p><strong>Duration:</strong> 6-12 months</p>
+                    <p><strong>Requirements:</strong> Design portfolio, creativity</p>
+                     <p><strong>Location:</strong> Malalumele</p>
+                </div>
+
+                <div class="position-card">
+                    <h3>UX/UI Design Intern</h3>
+                    <p>Collaborate with our design team to create intuitive user experiences. Work on wireframing, prototyping, and user testing for various digital products.</p>
+                    <p><strong>Duration:</strong> 6-12 months</p>
+                    <p><strong>Requirements:</strong> Design portfolio, creativity</p>
+                     <p><strong>Location:</strong> Malalumele</p>
+                </div>
+
+                <div class="position-card">
+                    <h3>UX/UI Design Intern</h3>
+                    <p>Collaborate with our design team to create intuitive user experiences. Work on wireframing, prototyping, and user testing for various digital products.</p>
+                    <p><strong>Duration:</strong> 6-12 months</p>
+                    <p><strong>Requirements:</strong> Design portfolio, creativity</p>
+                     <p><strong>Location:</strong> Malalumele</p>
+                </div>
+
+
+                   
+                <div class="position-card">
+                    <h3>UX/UI Design Intern</h3>
+                    <p>Collaborate with our design team to create intuitive user experiences. Work on wireframing, prototyping, and user testing for various digital products.</p>
+                    <p><strong>Duration:</strong> 6-12 months</p>
+                    <p><strong>Requirements:</strong> Design portfolio, creativity</p>
+                     <p><strong>Location:</strong> Malalumele</p>
+                </div>
+
+                <div class="position-card">
+                    <h3>UX/UI Design Intern</h3>
+                    <p>Collaborate with our design team to create intuitive user experiences. Work on wireframing, prototyping, and user testing for various digital products.</p>
+                    <p><strong>Duration:</strong> 6-12 months</p>
+                    <p><strong>Requirements:</strong> Design portfolio, creativity</p>
+                     <p><strong>Location:</strong> Malalumele</p>
+                </div>
+
+                <div class="position-card">
+                    <h3>UX/UI Design Intern</h3>
+                    <p>Collaborate with our design team to create intuitive user experiences. Work on wireframing, prototyping, and user testing for various digital products.</p>
+                    <p><strong>Duration:</strong> 6-12 months</p>
+                    <p><strong>Requirements:</strong> Design portfolio, creativity</p>
+                     <p><strong>Location:</strong> Malalumele</p>
+                </div>
+            
+        </section>
+
+        <section class="cta-section">
+            <h2>Start Your Application</h2>
+            <p>Join our Work Integrated Learning program and gain the experience you need to launch your career.</p>
+            <a href="{{ url_for('application') }}" target="_blank" class="btn">Apply Now</a>
+        </section>
+    </div>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 Maxelo Technologies. All rights reserved.</p>
+            <p>Contact: info@maxelo.co.za | Phone: +27 12 345 6789</p>
+        </div>
+    </footer>
+</body>
+</html>
