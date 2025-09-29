@@ -18,21 +18,29 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def get_db_connection():
-    """Get database connection using External Database URL"""
+    """Get database connection - tries Render PostgreSQL first, then local PostgreSQL"""
     try:
-        # Get the External Database URL from environment variables
+        # First try: Render PostgreSQL (External Database URL)
         database_url = os.environ.get('DATABASE_URL')
         
-        if not database_url:
-            print("❌ DATABASE_URL environment variable not found")
-            print("💡 Please set DATABASE_URL in Render environment variables")
-            return None
+        if database_url:
+            print("🔗 Using Render PostgreSQL database...")
+            print(f"🔗 Database URL: {database_url.split('@')[0]}@***")  # Hide password in logs
+            conn = psycopg2.connect(database_url, connect_timeout=10)
+            print("✅ Render PostgreSQL connection successful")
+            return conn
         
-        print(f"🔗 Using Database URL: {database_url.split('@')[0]}@***")  # Hide password in logs
-        
-        # Connect using the external URL
-        conn = psycopg2.connect(database_url, connect_timeout=10)
-        print("✅ Database connection successful")
+        # Second try: Local PostgreSQL database
+        print("🔗 Using Local PostgreSQL database...")
+        conn = psycopg2.connect(
+            host='localhost',
+            database='wil_database',
+            user='postgres',
+            password='Maxelo@2023',
+            port=5432,
+            connect_timeout=10
+        )
+        print("✅ Local PostgreSQL connection successful")
         return conn
         
     except Exception as e:
@@ -59,7 +67,6 @@ def init_database():
                 phone VARCHAR(20) NOT NULL,
                 institution VARCHAR(100) NOT NULL,
                 course VARCHAR(100) NOT NULL,
-                
                 cv_filename VARCHAR(255),
                 cv_data BYTEA,
                 application_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -105,6 +112,7 @@ def init_database():
 
 # Initialize database when app starts
 print("🚀 Starting Maxelo Technologies WIL Application...")
+print("💡 Database Strategy: Render PostgreSQL → Local PostgreSQL")
 init_database()
 
 # Routes
@@ -122,7 +130,6 @@ def application():
             phone = request.form.get('phone')
             institution = request.form.get('institution')
             course = request.form.get('course')
-           
             cv_file = request.files.get('cv')
             
             print(f"📝 Application submitted: {full_name}, {email}")  # Debug print
@@ -157,7 +164,7 @@ def application():
                 cur.execute('''
                     INSERT INTO applications 
                     (full_name, email, phone, institution, course, cv_filename, cv_data)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s,)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ''', (full_name, email, phone, institution, course, filename, cv_data))
                 
                 conn.commit()
@@ -379,12 +386,18 @@ def test_db():
             cur.execute('SELECT COUNT(*) FROM admin')
             admin_count = cur.fetchone()[0]
             
+            # Get current database info
+            cur.execute('SELECT current_database(), current_user')
+            db_info = cur.fetchone()
+            
             cur.close()
             conn.close()
             
             return f"""
             <h2>✅ Database Connection Successful</h2>
             <p><strong>Database Version:</strong> {db_version[0]}</p>
+            <p><strong>Current Database:</strong> {db_info[0]}</p>
+            <p><strong>Current User:</strong> {db_info[1]}</p>
             <p><strong>Applications in database:</strong> {app_count}</p>
             <p><strong>Admin users:</strong> {admin_count}</p>
             <p style="color: green; font-weight: bold;">✅ Your database is properly connected!</p>
@@ -392,7 +405,7 @@ def test_db():
         else:
             return """
             <h2>❌ Database Connection Failed</h2>
-            <p>Please check your DATABASE_URL environment variable.</p>
+            <p>Please check your database configuration.</p>
             """
     except Exception as e:
         return f"<h2>❌ Database Error</h2><p>{str(e)}</p>"
@@ -405,14 +418,15 @@ def debug_env():
     
     # Hide password for security
     safe_url = database_url
-    if '@' in database_url:
+    if database_url != 'NOT_SET' and '@' in database_url:
         safe_url = database_url.split('@')[0] + '@***'
     
     return f"""
     <h2>Environment Debug</h2>
+    <p><strong>Using Database:</strong> {'Render PostgreSQL' if database_url != 'NOT_SET' else 'Local PostgreSQL'}</p>
     <p><strong>DATABASE_URL:</strong> {safe_url}</p>
-    <p><strong>DATABASE_URL exists:</strong> {bool(database_url)}</p>
-    <p><strong>SECRET_KEY exists:</strong> {bool(secret_key)}</p>
+    <p><strong>DATABASE_URL exists:</strong> {bool(database_url and database_url != 'NOT_SET')}</p>
+    <p><strong>SECRET_KEY exists:</strong> {bool(secret_key and secret_key != 'NOT_SET')}</p>
     <p><strong>SECRET_KEY length:</strong> {len(secret_key) if secret_key != 'NOT_SET' else 0}</p>
     """
 
@@ -429,7 +443,6 @@ def health_check():
     except:
         return "Database connection failed", 500
 
-# ✅ FIXED: These routes were incorrectly indented inside health_check function
 @app.route('/debug-applications')
 def debug_applications():
     """Debug route to check applications directly"""
@@ -483,64 +496,7 @@ def debug_applications():
     except Exception as e:
         return f"<h2>Error: {str(e)}</h2>"
 
-@app.route('/check-db-tables')
-def check_db_tables():
-    """Check all tables in the database"""
-    try:
-        conn = get_db_connection()
-        if conn:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = 'public'
-                ORDER BY table_name
-            """)
-            tables = cur.fetchall()
-            cur.close()
-            conn.close()
-            
-            table_list = [table[0] for table in tables]
-            return f"""
-            <h2>Database Tables</h2>
-            <p><strong>Tables found:</strong> {table_list}</p>
-            <p><strong>Total tables:</strong> {len(tables)}</p>
-            """
-        else:
-            return "<h2>Database connection failed</h2>"
-    except Exception as e:
-        return f"<h2>Error: {str(e)}</h2>"
 
-@app.route('/add-test-application')
-def add_test_application():
-    """Add a test application for debugging"""
-    try:
-        conn = get_db_connection()
-        if conn:
-            cur = conn.cursor()
-            cur.execute('''
-                INSERT INTO applications 
-                (full_name, email, phone, institution, course,  cv_filename)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            ''', (
-                'Test Student', 
-                'test@student.com', 
-                '1234567890', 
-                'Test University', 
-                 
-                'Software Development', 
-                'test_cv.pdf'
-            ))
-            
-            conn.commit()
-            cur.close()
-            conn.close()
-            
-            return "✅ Test application added successfully! Check your admin dashboard."
-        else:
-            return "❌ Database connection failed"
-    except Exception as e:
-        return f"❌ Error: {str(e)}"
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
