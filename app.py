@@ -59,7 +59,7 @@ def init_database():
                 phone VARCHAR(20) NOT NULL,
                 institution VARCHAR(100) NOT NULL,
                 course VARCHAR(100) NOT NULL,
-                position VARCHAR(100) NOT NULL,
+                
                 cv_filename VARCHAR(255),
                 cv_data BYTEA,
                 application_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -122,13 +122,13 @@ def application():
             phone = request.form.get('phone')
             institution = request.form.get('institution')
             course = request.form.get('course')
-            position = request.form.get('position')
+           
             cv_file = request.files.get('cv')
             
             print(f"📝 Application submitted: {full_name}, {email}")  # Debug print
             
             # Validate required fields
-            if not all([full_name, email, phone, institution, course, position]):
+            if not all([full_name, email, phone, institution, course]):
                 flash('Please fill in all required fields', 'error')
                 return render_template('application.html')
             
@@ -156,9 +156,9 @@ def application():
                 cur = conn.cursor()
                 cur.execute('''
                     INSERT INTO applications 
-                    (full_name, email, phone, institution, course, position, cv_filename, cv_data)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                ''', (full_name, email, phone, institution, course, position, filename, cv_data))
+                    (full_name, email, phone, institution, course, cv_filename, cv_data)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s,)
+                ''', (full_name, email, phone, institution, course, filename, cv_data))
                 
                 conn.commit()
                 cur.close()
@@ -272,7 +272,7 @@ def admin_dashboard():
         if conn:
             cur = conn.cursor()
             cur.execute('''
-                SELECT id, full_name, email, phone, institution, course, position, 
+                SELECT id, full_name, email, phone, institution, course, 
                        cv_filename, application_date, status 
                 FROM applications 
                 ORDER BY application_date DESC
@@ -451,7 +451,7 @@ def debug_applications():
             
             # Get all applications with detailed info
             cur.execute('''
-                SELECT id, full_name, email, phone, institution, course, position, 
+                SELECT id, full_name, email, phone, institution, course, 
                        cv_filename, application_date, status 
                 FROM applications 
                 ORDER BY application_date DESC
@@ -520,14 +520,14 @@ def add_test_application():
             cur = conn.cursor()
             cur.execute('''
                 INSERT INTO applications 
-                (full_name, email, phone, institution, course, position, cv_filename)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                (full_name, email, phone, institution, course,  cv_filename)
+                VALUES (%s, %s, %s, %s, %s, %s)
             ''', (
                 'Test Student', 
                 'test@student.com', 
                 '1234567890', 
                 'Test University', 
-                'Computer Science', 
+                 
                 'Software Development', 
                 'test_cv.pdf'
             ))

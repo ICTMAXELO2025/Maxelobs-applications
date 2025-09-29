@@ -460,7 +460,7 @@
                             <td>{{ app.phone if app.phone else 'N/A' }}</td>
                             <td>{{ app.institution if app.institution else 'N/A' }}</td>
                             <td>{{ app.course if app.course else 'N/A' }}</td>
-                            <td>{{ app.position if app.position else 'N/A' }}</td>
+                        
                             <td>
                                 {% if app.application_date %}
                                     {% if app.application_date is string %}
@@ -495,7 +495,7 @@
                                             <option value="Rejected" {% if (app.status if app.status else 'Pending') == 'Rejected' %}selected{% endif %}>Rejected</option>
                                         </select>
                                     </form>
-                                    <button class="toggle-details" onclick="toggleDetails({{ app.id }})">Details</button>
+                                    <button class="toggle-detail" (click)="toggleDetails(app.id)">Details</button>
                                 </div>
                             </td>
                         </tr>
@@ -523,10 +523,7 @@
                                         <span class="detail-label">Course:</span>
                                         <span class="detail-value">{{ app.course if app.course else 'N/A' }}</span>
                                     </div>
-                                    <div class="detail-row">
-                                        <span class="detail-label">Position:</span>
-                                        <span class="detail-value">{{ app.position if app.position else 'N/A' }}</span>
-                                    </div>
+                                   
                                     <div class="detail-row">
                                         <span class="detail-label">Application Date:</span>
                                         <span class="detail-value">
