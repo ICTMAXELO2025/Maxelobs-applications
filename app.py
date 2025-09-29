@@ -125,6 +125,8 @@ def application():
             position = request.form.get('position')
             cv_file = request.files.get('cv')
             
+            print(f"📝 Application submitted: {full_name}, {email}")  # Debug print
+            
             # Validate required fields
             if not all([full_name, email, phone, institution, course, position]):
                 flash('Please fill in all required fields', 'error')
@@ -162,9 +164,11 @@ def application():
                 cur.close()
                 conn.close()
                 
+                print(f"✅ Application saved to database: {full_name}")  # Debug print
                 flash('Application submitted successfully! We will contact you soon.', 'success')
                 return redirect(url_for('index'))
             else:
+                print("❌ Database connection failed during application submission")
                 flash('Database connection error. Please try again.', 'error')
             
         except Exception as e:
@@ -273,7 +277,11 @@ def admin_dashboard():
                 FROM applications 
                 ORDER BY application_date DESC
             ''')
-            applications = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+            applications = []
+            for row in cur.fetchall():
+                applications.append(dict(zip(columns, row)))
+            
             cur.close()
             conn.close()
             return render_template('admin_dashboard.html', applications=applications)
@@ -420,6 +428,119 @@ def health_check():
             return "Database connection failed", 500
     except:
         return "Database connection failed", 500
+
+# ✅ FIXED: These routes were incorrectly indented inside health_check function
+@app.route('/debug-applications')
+def debug_applications():
+    """Debug route to check applications directly"""
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    
+    try:
+        conn = get_db_connection()
+        if conn:
+            cur = conn.cursor()
+            
+            # Check if applications table exists
+            cur.execute("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public' AND table_name = 'applications'
+            """)
+            table_exists = cur.fetchone()
+            
+            # Get all applications with detailed info
+            cur.execute('''
+                SELECT id, full_name, email, phone, institution, course, position, 
+                       cv_filename, application_date, status 
+                FROM applications 
+                ORDER BY application_date DESC
+            ''')
+            applications = cur.fetchall()
+            
+            # Get table structure
+            cur.execute("""
+                SELECT column_name, data_type 
+                FROM information_schema.columns 
+                WHERE table_name = 'applications' 
+                ORDER BY ordinal_position
+            """)
+            columns = cur.fetchall()
+            
+            cur.close()
+            conn.close()
+            
+            return f"""
+            <h2>Applications Debug Info</h2>
+            <p><strong>Applications table exists:</strong> {bool(table_exists)}</p>
+            <p><strong>Number of applications:</strong> {len(applications)}</p>
+            <p><strong>Table columns:</strong> {columns}</p>
+            <h3>Applications Data:</h3>
+            <pre>{applications}</pre>
+            """
+        else:
+            return "<h2>Database connection failed</h2>"
+    except Exception as e:
+        return f"<h2>Error: {str(e)}</h2>"
+
+@app.route('/check-db-tables')
+def check_db_tables():
+    """Check all tables in the database"""
+    try:
+        conn = get_db_connection()
+        if conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public'
+                ORDER BY table_name
+            """)
+            tables = cur.fetchall()
+            cur.close()
+            conn.close()
+            
+            table_list = [table[0] for table in tables]
+            return f"""
+            <h2>Database Tables</h2>
+            <p><strong>Tables found:</strong> {table_list}</p>
+            <p><strong>Total tables:</strong> {len(tables)}</p>
+            """
+        else:
+            return "<h2>Database connection failed</h2>"
+    except Exception as e:
+        return f"<h2>Error: {str(e)}</h2>"
+
+@app.route('/add-test-application')
+def add_test_application():
+    """Add a test application for debugging"""
+    try:
+        conn = get_db_connection()
+        if conn:
+            cur = conn.cursor()
+            cur.execute('''
+                INSERT INTO applications 
+                (full_name, email, phone, institution, course, position, cv_filename)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ''', (
+                'Test Student', 
+                'test@student.com', 
+                '1234567890', 
+                'Test University', 
+                'Computer Science', 
+                'Software Development', 
+                'test_cv.pdf'
+            ))
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            return "✅ Test application added successfully! Check your admin dashboard."
+        else:
+            return "❌ Database connection failed"
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

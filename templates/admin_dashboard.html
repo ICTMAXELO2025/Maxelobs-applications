@@ -295,6 +295,29 @@
             background: white;
             cursor: pointer;
         }
+
+        /* Debug Information Styles */
+        .debug-info {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        
+        .debug-info h4 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+        
+        .debug-info ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        .debug-info li {
+            margin-bottom: 5px;
+        }
         
         @media (max-width: 768px) {
             .header-content {
@@ -340,6 +363,25 @@
             {% endif %}
         {% endwith %}
 
+        <!-- Debug Information Section -->
+        {% if applications|length == 0 %}
+        <div class="debug-info">
+            <h4>Debug Information</h4>
+            <p><strong>No applications found in database.</strong></p>
+            <p>Possible reasons:</p>
+            <ul>
+                <li>No applications have been submitted yet</li>
+                <li>Database tables were not created properly</li>
+                <li>There's a database connection issue</li>
+            </ul>
+            <p>
+                <a href="/debug-applications" class="btn" style="background-color: #ffc107; color: black;">Check Applications Debug</a>
+                <a href="/check-db-tables" class="btn" style="background-color: #17a2b8;">Check Database Tables</a>
+                <a href="/add-test-application" class="btn" style="background-color: #28a745;">Add Test Application</a>
+            </p>
+        </div>
+        {% endif %}
+
         <div class="dashboard-header">
             <h1>Applications Dashboard</h1>
             <p>Manage and review all applications</p>
@@ -351,15 +393,15 @@
                 <div class="stat-label">Total Applications</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number">{{ applications|selectattr('9', 'equalto', 'Pending')|list|length }}</div>
+                <div class="stat-number">{{ applications|selectattr('status', 'equalto', 'Pending')|list|length }}</div>
                 <div class="stat-label">Pending</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number">{{ applications|selectattr('9', 'equalto', 'Approved')|list|length }}</div>
+                <div class="stat-number">{{ applications|selectattr('status', 'equalto', 'Approved')|list|length }}</div>
                 <div class="stat-label">Approved</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number">{{ applications|selectattr('9', 'equalto', 'Rejected')|list|length }}</div>
+                <div class="stat-number">{{ applications|selectattr('status', 'equalto', 'Rejected')|list|length }}</div>
                 <div class="stat-label">Rejected</div>
             </div>
         </div>
@@ -379,9 +421,9 @@
                     <option value="all">All Positions</option>
                     {% set positions = [] %}
                     {% for app in applications %}
-                        {% if app[6] and app[6] not in positions %}
-                            {% set _ = positions.append(app[6]) %}
-                            <option value="{{ app[6] }}">{{ app[6] }}</option>
+                        {% if app.position and app.position not in positions %}
+                            {% set _ = positions.append(app.position) %}
+                            <option value="{{ app.position }}">{{ app.position }}</option>
                         {% endif %}
                     {% endfor %}
                 </select>
@@ -411,33 +453,33 @@
                 <tbody>
                     {% if applications %}
                         {% for app in applications %}
-                        <tr class="application-row" data-status="{{ app[9] if app[9] else 'Pending' }}" data-position="{{ app[6] if app[6] else '' }}">
-                            <td>{{ app[0] }}</td>
-                            <td>{{ app[1] if app[1] else 'N/A' }}</td>
-                            <td>{{ app[2] if app[2] else 'N/A' }}</td>
-                            <td>{{ app[3] if app[3] else 'N/A' }}</td>
-                            <td>{{ app[4] if app[4] else 'N/A' }}</td>
-                            <td>{{ app[5] if app[5] else 'N/A' }}</td>
-                            <td>{{ app[6] if app[6] else 'N/A' }}</td>
+                        <tr class="application-row" data-status="{{ app.status if app.status else 'Pending' }}" data-position="{{ app.position if app.position else '' }}">
+                            <td>{{ app.id }}</td>
+                            <td>{{ app.full_name if app.full_name else 'N/A' }}</td>
+                            <td>{{ app.email if app.email else 'N/A' }}</td>
+                            <td>{{ app.phone if app.phone else 'N/A' }}</td>
+                            <td>{{ app.institution if app.institution else 'N/A' }}</td>
+                            <td>{{ app.course if app.course else 'N/A' }}</td>
+                            <td>{{ app.position if app.position else 'N/A' }}</td>
                             <td>
-                                {% if app[8] %}
-                                    {% if app[8] is string %}
-                                        {{ app[8] }}
+                                {% if app.application_date %}
+                                    {% if app.application_date is string %}
+                                        {{ app.application_date }}
                                     {% else %}
-                                        {{ app[8].strftime('%Y-%m-%d %H:%M') }}
+                                        {{ app.application_date.strftime('%Y-%m-%d %H:%M') }}
                                     {% endif %}
                                 {% else %}
                                     N/A
                                 {% endif %}
                             </td>
                             <td>
-                                <span class="status-badge status-{{ (app[9] if app[9] else 'Pending')|lower }}">
-                                    {{ app[9] if app[9] else 'Pending' }}
+                                <span class="status-badge status-{{ (app.status if app.status else 'Pending')|lower }}">
+                                    {{ app.status if app.status else 'Pending' }}
                                 </span>
                             </td>
                             <td>
-                                {% if app[7] %}
-                                    <a href="{{ url_for('download_cv', filename=app[7]) }}" class="btn btn-info btn-small" download>
+                                {% if app.cv_filename %}
+                                    <a href="{{ url_for('download_cv', app_id=app.id) }}" class="btn btn-info btn-small">
                                         Download CV
                                     </a>
                                 {% else %}
@@ -446,53 +488,53 @@
                             </td>
                             <td>
                                 <div class="action-buttons">
-                                    <form class="status-form" action="{{ url_for('update_application_status', app_id=app[0]) }}" method="POST">
+                                    <form class="status-form" action="{{ url_for('update_application_status', app_id=app.id) }}" method="POST">
                                         <select class="status-select" name="status" onchange="this.form.submit()">
-                                            <option value="Pending" {% if (app[9] if app[9] else 'Pending') == 'Pending' %}selected{% endif %}>Pending</option>
-                                            <option value="Approved" {% if (app[9] if app[9] else 'Pending') == 'Approved' %}selected{% endif %}>Approved</option>
-                                            <option value="Rejected" {% if (app[9] if app[9] else 'Pending') == 'Rejected' %}selected{% endif %}>Rejected</option>
+                                            <option value="Pending" {% if (app.status if app.status else 'Pending') == 'Pending' %}selected{% endif %}>Pending</option>
+                                            <option value="Approved" {% if (app.status if app.status else 'Pending') == 'Approved' %}selected{% endif %}>Approved</option>
+                                            <option value="Rejected" {% if (app.status if app.status else 'Pending') == 'Rejected' %}selected{% endif %}>Rejected</option>
                                         </select>
                                     </form>
-                                    
+                                    <button class="toggle-details" onclick="toggleDetails({{ app.id }})">Details</button>
                                 </div>
                             </td>
                         </tr>
-                        <tr id="details-{{ app[0] }}" style="display: none;">
+                        <tr id="details-{{ app.id }}" style="display: none;">
                             <td colspan="11">
                                 <div class="application-details">
-                                    <h4>Application Details #{{ app[0] }}</h4>
+                                    <h4>Application Details #{{ app.id }}</h4>
                                     <div class="detail-row">
                                         <span class="detail-label">Full Name:</span>
-                                        <span class="detail-value">{{ app[1] if app[1] else 'N/A' }}</span>
+                                        <span class="detail-value">{{ app.full_name if app.full_name else 'N/A' }}</span>
                                     </div>
                                     <div class="detail-row">
                                         <span class="detail-label">Email:</span>
-                                        <span class="detail-value">{{ app[2] if app[2] else 'N/A' }}</span>
+                                        <span class="detail-value">{{ app.email if app.email else 'N/A' }}</span>
                                     </div>
                                     <div class="detail-row">
                                         <span class="detail-label">Phone:</span>
-                                        <span class="detail-value">{{ app[3] if app[3] else 'N/A' }}</span>
+                                        <span class="detail-value">{{ app.phone if app.phone else 'N/A' }}</span>
                                     </div>
                                     <div class="detail-row">
                                         <span class="detail-label">Institution:</span>
-                                        <span class="detail-value">{{ app[4] if app[4] else 'N/A' }}</span>
+                                        <span class="detail-value">{{ app.institution if app.institution else 'N/A' }}</span>
                                     </div>
                                     <div class="detail-row">
                                         <span class="detail-label">Course:</span>
-                                        <span class="detail-value">{{ app[5] if app[5] else 'N/A' }}</span>
+                                        <span class="detail-value">{{ app.course if app.course else 'N/A' }}</span>
                                     </div>
                                     <div class="detail-row">
                                         <span class="detail-label">Position:</span>
-                                        <span class="detail-value">{{ app[6] if app[6] else 'N/A' }}</span>
+                                        <span class="detail-value">{{ app.position if app.position else 'N/A' }}</span>
                                     </div>
                                     <div class="detail-row">
                                         <span class="detail-label">Application Date:</span>
                                         <span class="detail-value">
-                                            {% if app[8] %}
-                                                {% if app[8] is string %}
-                                                    {{ app[8] }}
+                                            {% if app.application_date %}
+                                                {% if app.application_date is string %}
+                                                    {{ app.application_date }}
                                                 {% else %}
-                                                    {{ app[8].strftime('%Y-%m-%d %H:%M') }}
+                                                    {{ app.application_date.strftime('%Y-%m-%d %H:%M') }}
                                                 {% endif %}
                                             {% else %}
                                                 N/A
@@ -502,16 +544,16 @@
                                     <div class="detail-row">
                                         <span class="detail-label">Status:</span>
                                         <span class="detail-value">
-                                            <span class="status-badge status-{{ (app[9] if app[9] else 'Pending')|lower }}">
-                                                {{ app[9] if app[9] else 'Pending' }}
+                                            <span class="status-badge status-{{ (app.status if app.status else 'Pending')|lower }}">
+                                                {{ app.status if app.status else 'Pending' }}
                                             </span>
                                         </span>
                                     </div>
-                                    {% if app[7] %}
+                                    {% if app.cv_filename %}
                                     <div class="detail-row">
                                         <span class="detail-label">CV File:</span>
                                         <span class="detail-value">
-                                            <a href="{{ url_for('download_cv', filename=app[7]) }}" class="btn btn-info btn-small" download>
+                                            <a href="{{ url_for('download_cv', app_id=app.id) }}" class="btn btn-info btn-small">
                                                 Download CV
                                             </a>
                                         </span>
