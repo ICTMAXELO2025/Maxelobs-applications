@@ -1,12 +1,10 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file
 import os
-import re
 from datetime import datetime
 import psycopg2
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import io
-import time
 
 app = Flask(__name__)
 
@@ -21,73 +19,35 @@ ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def clean_database_url(url):
-    """Clean and fix malformed database URLs"""
-    if not url:
-        return None
-    
-    # Remove spaces and fix common issues
-    url = url.strip()
-    url = url.replace(' ', '')
-    
-    # Fix the typo in the protocol (postgresal -> postgres)
-    url = url.replace('postgresal://', 'postgresql://')
-    
-    # Ensure it starts with postgresql://
-    if not url.startswith('postgresql://'):
-        if url.startswith('postgres://'):
-            url = url.replace('postgres://', 'postgresql://', 1)
-        else:
-            # If it doesn't start with any protocol, add postgresql://
-            url = 'postgresql://' + url
-    
-    return url
-
 def get_database_url():
     database_url = os.environ.get('DATABASE_URL')
-    print(f"Original DATABASE_URL: {database_url}")  # Debug
-    
     if database_url:
-        cleaned_url = clean_database_url(database_url)
-        print(f"Cleaned DATABASE_URL: {cleaned_url}")  # Debug
-        return cleaned_url
+        if database_url.startswith('postgres://'):
+            database_url = database_url.replace('postgres://', 'postgresql://', 1)
+        return database_url
     else:
-        # Fallback for local development
         return "postgresql://postgres:Maxelo%402023@localhost:5432/wil_database"
 
 def get_db_connection():
-    """Get database connection for Render with retry logic"""
-    max_retries = 3
-    database_url = get_database_url()
-    
-    print(f"Attempting to connect with URL: {database_url}")  # Debug
-    
-    for attempt in range(max_retries):
-        try:
-            conn = psycopg2.connect(
-                database_url,
-                connect_timeout=10
-            )
-            print("✅ Database connection successful")
-            return conn
-        except Exception as e:
-            print(f"❌ Database connection attempt {attempt + 1} failed: {e}")
-            if attempt < max_retries - 1:
-                time.sleep(2)  # Wait before retrying
-                continue
-            return None
+    """Get database connection for Render"""
+    try:
+        conn = psycopg2.connect(get_database_url())
+        return conn
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        return None
 
 def init_database():
-    """Initialize database tables with better error handling"""
+    """Initialize database tables"""
     conn = get_db_connection()
     if not conn:
-        print("❌ Cannot initialize database - no connection")
-        return False
+        print("Cannot initialize database - no connection")
+        return
         
     try:
         cur = conn.cursor()
         
-        # Check if applications table exists and has correct structure
+        # Create applications table
         cur.execute('''
             CREATE TABLE IF NOT EXISTS applications (
                 id SERIAL PRIMARY KEY,
@@ -98,7 +58,6 @@ def init_database():
                 course VARCHAR(100) NOT NULL,
                 position VARCHAR(100) NOT NULL,
                 cv_filename VARCHAR(255),
-                cv_data BYTEA,
                 application_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 status VARCHAR(20) DEFAULT 'Pending'
             )
@@ -126,16 +85,14 @@ def init_database():
                 'INSERT INTO admin (email, password) VALUES (%s, %s)',
                 (DEFAULT_ADMIN_EMAIL, hashed_password)
             )
-            print("✅ Default admin created")
+            print("Default admin created")
         
         conn.commit()
-        print("✅ Database initialized successfully")
-        return True
+        print("Database initialized successfully")
         
     except Exception as e:
-        print(f"❌ Database initialization error: {e}")
+        print(f"Database initialization error: {e}")
         conn.rollback()
-        return False
     finally:
         cur.close()
         conn.close()
@@ -176,11 +133,6 @@ def application():
             filename = secure_filename(cv_file.filename)
             cv_data = cv_file.read()
             
-            # Validate file size (5MB max)
-            if len(cv_data) > 5 * 1024 * 1024:
-                flash('File size too large. Please upload a file smaller than 5MB.', 'error')
-                return render_template('application.html')
-            
             # Save to database
             conn = get_db_connection()
             if conn:
@@ -201,7 +153,7 @@ def application():
                 flash('Database connection error. Please try again.', 'error')
             
         except Exception as e:
-            print(f"❌ Application submission error: {e}")
+            print(f"Application submission error: {e}")
             flash('Error submitting application. Please try again.', 'error')
     
     return render_template('application.html')
@@ -237,7 +189,7 @@ def admin_login():
                 flash('Database connection error', 'error')
                 
         except Exception as e:
-            print(f"❌ Admin login error: {e}")
+            print(f"Admin login error: {e}")
             flash('Login error. Please try again.', 'error')
     
     return render_template('admin_login.html')
@@ -286,7 +238,7 @@ def admin_forgot_password():
                 flash('Database connection error', 'error')
                 
         except Exception as e:
-            print(f"❌ Password reset error: {e}")
+            print(f"Password reset error: {e}")
             flash('Error resetting password. Please try again.', 'error')
     
     return render_template('admin_forgot_password.html')
@@ -300,12 +252,7 @@ def admin_dashboard():
         conn = get_db_connection()
         if conn:
             cur = conn.cursor()
-            cur.execute('''
-                SELECT id, full_name, email, phone, institution, course, position, 
-                       cv_filename, application_date, status 
-                FROM applications 
-                ORDER BY application_date DESC
-            ''')
+            cur.execute('SELECT * FROM applications ORDER BY application_date DESC')
             applications = cur.fetchall()
             cur.close()
             conn.close()
@@ -314,7 +261,7 @@ def admin_dashboard():
             flash('Database connection error', 'error')
             return render_template('admin_dashboard.html', applications=[])
     except Exception as e:
-        print(f"❌ Admin dashboard error: {e}")
+        print(f"Admin dashboard error: {e}")
         flash('Error loading applications', 'error')
         return render_template('admin_dashboard.html', applications=[])
 
@@ -342,7 +289,7 @@ def update_application_status(app_id):
             flash('Database connection error', 'error')
             
     except Exception as e:
-        print(f"❌ Status update error: {e}")
+        print(f"Status update error: {e}")
         flash('Error updating application status', 'error')
     
     return redirect(url_for('admin_dashboard'))
@@ -375,7 +322,7 @@ def download_cv(app_id):
             flash('Database connection error', 'error')
             
     except Exception as e:
-        print(f"❌ CV download error: {e}")
+        print(f"CV download error: {e}")
         flash('Error downloading CV', 'error')
     
     return redirect(url_for('admin_dashboard'))
@@ -395,59 +342,19 @@ def test_db():
             cur = conn.cursor()
             cur.execute('SELECT version()')
             db_version = cur.fetchone()
-            
-            # Test applications table
-            cur.execute('SELECT COUNT(*) FROM applications')
-            app_count = cur.fetchone()[0]
-            
             cur.close()
             conn.close()
-            
-            return f"""
-            <h2>✅ Database Connection Successful</h2>
-            <p><strong>Database Version:</strong> {db_version[0]}</p>
-            <p><strong>Applications in database:</strong> {app_count}</p>
-            <p><strong>Database URL:</strong> {get_database_url()}</p>
-            """
+            return f"✅ Database connected successfully. Version: {db_version[0]}"
         else:
-            return "<h2>❌ Database Connection Failed</h2>"
+            return "❌ Database connection failed"
     except Exception as e:
-        return f"<h2>❌ Database Error</h2><p>{str(e)}</p>"
-
-@app.route('/debug-env')
-def debug_env():
-    """Debug environment variables"""
-    import os
-    db_url = os.environ.get('DATABASE_URL')
-    return f"""
-    <h2>Environment Debug</h2>
-    <p><strong>DATABASE_URL exists:</strong> {bool(db_url)}</p>
-    <p><strong>DATABASE_URL value:</strong> {db_url}</p>
-    <p><strong>Cleaned DATABASE_URL:</strong> {get_database_url()}</p>
-    """
-
-@app.route('/health')
-def health_check():
-    """Health check endpoint for Render"""
-    try:
-        conn = get_db_connection()
-        if conn:
-            conn.close()
-            return "OK", 200
-        else:
-            return "Database connection failed", 500
-    except:
-        return "Database connection failed", 500
-
-# Initialize database when app starts
-print("🚀 Starting Maxelo Technologies WIL Application...")
-print("🔧 Initializing database...")
-if init_database():
-    print("✅ Startup tasks completed successfully")
-else:
-    print("❌ Startup tasks failed")
+        return f"❌ Database error: {str(e)}"
 
 if __name__ == '__main__':
+    # Initialize database
+    print("Starting Maxelo Technologies WIL Application...")
+    init_database()
+    
     # Get port from environment variable (Render sets this)
     port = int(os.environ.get('PORT', 5000))
     
