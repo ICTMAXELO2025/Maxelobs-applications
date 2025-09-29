@@ -418,12 +418,12 @@
                 
                 <label for="position-filter">Filter by Position:</label>
                 <select id="position-filter" onchange="filterApplications()">
-                    <option value="all">All Positions</option>
+                    <option value="all">All Courses</option>
                     {% set positions = [] %}
                     {% for app in applications %}
-                        {% if app.position and app.position not in positions %}
-                            {% set _ = positions.append(app.position) %}
-                            <option value="{{ app.position }}">{{ app.position }}</option>
+                        {% if app.courses and app.courses not in courses %}
+                            {% set _ = courses.append(app.courses) %}
+                            <option value="{{ app.courses}}">{{ app.courses }}</option>
                         {% endif %}
                     {% endfor %}
                 </select>
