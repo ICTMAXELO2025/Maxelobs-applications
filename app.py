@@ -1,27 +1,31 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file
 import os
 from datetime import datetime
 import psycopg2
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+import io
 
 app = Flask(__name__)
 
-# ✅ Use environment variables for configuration
+# Configuration
 app.secret_key = os.environ.get('SECRET_KEY', 'fallback-secret-key-for-development')
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max file size
 
-# ✅ Fixed database configuration for Render
+# Allowed file extensions for CVs
+ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 def get_database_url():
-    # Render automatically provides DATABASE_URL environment variable
     database_url = os.environ.get('DATABASE_URL')
-    
-    # If DATABASE_URL exists (on Render), use it directly
     if database_url:
-        # Render's DATABASE_URL might be in postgres:// format, convert to postgresql://
         if database_url.startswith('postgres://'):
             database_url = database_url.replace('postgres://', 'postgresql://', 1)
         return database_url
     else:
-        # Fallback for local development only
         return "postgresql://postgres:Maxelo%402023@localhost:5432/wil_database"
 
 def get_db_connection():
@@ -53,6 +57,7 @@ def init_database():
                 institution VARCHAR(100) NOT NULL,
                 course VARCHAR(100) NOT NULL,
                 position VARCHAR(100) NOT NULL,
+                cv_filename VARCHAR(255),
                 application_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 status VARCHAR(20) DEFAULT 'Pending'
             )
@@ -92,25 +97,11 @@ def init_database():
         cur.close()
         conn.close()
 
-# ✅ Test database connection route
-@app.route('/test-db')
-def test_db():
-    """Test database connection"""
-    try:
-        conn = get_db_connection()
-        if conn:
-            cur = conn.cursor()
-            cur.execute('SELECT version()')
-            db_version = cur.fetchone()
-            cur.close()
-            conn.close()
-            return f"✅ Database connected successfully. Version: {db_version[0]}"
-        else:
-            return "❌ Database connection failed"
-    except Exception as e:
-        return f"❌ Database error: {str(e)}"
+# Routes
+@app.route('/')
+def index():
+    return render_template('index.html')
 
-# ✅ Application route
 @app.route('/application', methods=['GET', 'POST'])
 def application():
     if request.method == 'POST':
@@ -122,11 +113,25 @@ def application():
             institution = request.form.get('institution')
             course = request.form.get('course')
             position = request.form.get('position')
+            cv_file = request.files.get('cv')
             
             # Validate required fields
             if not all([full_name, email, phone, institution, course, position]):
                 flash('Please fill in all required fields', 'error')
                 return render_template('application.html')
+            
+            # Validate CV file
+            if not cv_file or cv_file.filename == '':
+                flash('Please upload your CV', 'error')
+                return render_template('application.html')
+            
+            if not allowed_file(cv_file.filename):
+                flash('Invalid file type. Please upload PDF or Word document.', 'error')
+                return render_template('application.html')
+            
+            # Save CV file
+            filename = secure_filename(cv_file.filename)
+            cv_data = cv_file.read()
             
             # Save to database
             conn = get_db_connection()
@@ -134,9 +139,9 @@ def application():
                 cur = conn.cursor()
                 cur.execute('''
                     INSERT INTO applications 
-                    (full_name, email, phone, institution, course, position)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                ''', (full_name, email, phone, institution, course, position))
+                    (full_name, email, phone, institution, course, position, cv_filename, cv_data)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ''', (full_name, email, phone, institution, course, position, filename, cv_data))
                 
                 conn.commit()
                 cur.close()
@@ -152,15 +157,6 @@ def application():
             flash('Error submitting application. Please try again.', 'error')
     
     return render_template('application.html')
-
-# ✅ Basic routes
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/apply')
-def apply():
-    return redirect(url_for('application'))
 
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
@@ -198,6 +194,55 @@ def admin_login():
     
     return render_template('admin_login.html')
 
+@app.route('/admin/forgot-password', methods=['GET', 'POST'])
+def admin_forgot_password():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        new_password = request.form.get('new_password')
+        confirm_password = request.form.get('confirm_password')
+        
+        if not all([email, new_password, confirm_password]):
+            flash('Please fill in all fields', 'error')
+            return render_template('admin_forgot_password.html')
+        
+        if new_password != confirm_password:
+            flash('Passwords do not match', 'error')
+            return render_template('admin_forgot_password.html')
+        
+        if len(new_password) < 6:
+            flash('Password must be at least 6 characters long', 'error')
+            return render_template('admin_forgot_password.html')
+        
+        try:
+            conn = get_db_connection()
+            if conn:
+                cur = conn.cursor()
+                cur.execute('SELECT * FROM admin WHERE email = %s', (email,))
+                admin = cur.fetchone()
+                
+                if admin:
+                    hashed_password = generate_password_hash(new_password)
+                    cur.execute(
+                        'UPDATE admin SET password = %s WHERE email = %s',
+                        (hashed_password, email)
+                    )
+                    conn.commit()
+                    cur.close()
+                    conn.close()
+                    
+                    flash('Password reset successfully! You can now login with your new password.', 'success')
+                    return redirect(url_for('admin_login'))
+                else:
+                    flash('Admin email not found', 'error')
+            else:
+                flash('Database connection error', 'error')
+                
+        except Exception as e:
+            print(f"Password reset error: {e}")
+            flash('Error resetting password. Please try again.', 'error')
+    
+    return render_template('admin_forgot_password.html')
+
 @app.route('/admin/dashboard')
 def admin_dashboard():
     if not session.get('admin_logged_in'):
@@ -220,11 +265,90 @@ def admin_dashboard():
         flash('Error loading applications', 'error')
         return render_template('admin_dashboard.html', applications=[])
 
+@app.route('/admin/update-status/<int:app_id>', methods=['POST'])
+def update_application_status(app_id):
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    
+    new_status = request.form.get('status')
+    
+    try:
+        conn = get_db_connection()
+        if conn:
+            cur = conn.cursor()
+            cur.execute(
+                'UPDATE applications SET status = %s WHERE id = %s',
+                (new_status, app_id)
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            flash(f'Application status updated to {new_status}', 'success')
+        else:
+            flash('Database connection error', 'error')
+            
+    except Exception as e:
+        print(f"Status update error: {e}")
+        flash('Error updating application status', 'error')
+    
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/download-cv/<int:app_id>')
+def download_cv(app_id):
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    
+    try:
+        conn = get_db_connection()
+        if conn:
+            cur = conn.cursor()
+            cur.execute('SELECT cv_filename, cv_data FROM applications WHERE id = %s', (app_id,))
+            result = cur.fetchone()
+            cur.close()
+            conn.close()
+            
+            if result and result[1]:
+                filename, cv_data = result
+                return send_file(
+                    io.BytesIO(cv_data),
+                    as_attachment=True,
+                    download_name=filename,
+                    mimetype='application/octet-stream'
+                )
+            else:
+                flash('CV not found', 'error')
+        else:
+            flash('Database connection error', 'error')
+            
+    except Exception as e:
+        print(f"CV download error: {e}")
+        flash('Error downloading CV', 'error')
+    
+    return redirect(url_for('admin_dashboard'))
+
 @app.route('/admin/logout')
 def admin_logout():
     session.clear()
     flash('You have been logged out successfully', 'success')
     return redirect(url_for('admin_login'))
+
+@app.route('/test-db')
+def test_db():
+    """Test database connection"""
+    try:
+        conn = get_db_connection()
+        if conn:
+            cur = conn.cursor()
+            cur.execute('SELECT version()')
+            db_version = cur.fetchone()
+            cur.close()
+            conn.close()
+            return f"✅ Database connected successfully. Version: {db_version[0]}"
+        else:
+            return "❌ Database connection failed"
+    except Exception as e:
+        return f"❌ Database error: {str(e)}"
 
 if __name__ == '__main__':
     # Initialize database
